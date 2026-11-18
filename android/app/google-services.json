@@ -1,0 +1,48 @@
+{
+  "project_info": {
+    "project_number": "159563009020",
+    "project_id": "roti-bakar-borneo-94f06",
+    "storage_bucket": "roti-bakar-borneo-94f06.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:159563009020:android:0267fc06576d3ac612c079",
+        "android_client_info": {
+          "package_name": "com.roti.bakar"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBIKEqDnDEQwilD4G-DmjbcDg0o7_yriig"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:159563009020:android:cf90c82b9dc8308912c079",
+        "android_client_info": {
+          "package_name": "com.rotibakarborneo.roti_bakar_borneo_flutter"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBIKEqDnDEQwilD4G-DmjbcDg0o7_yriig"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
