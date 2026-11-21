@@ -610,8 +610,8 @@ int _lateMinutes(
 /// Target per shift sesuai ketentuan operasional. Jam kerja dibulatkan ke
 /// jam terdekat karena target ditentukan dalam satuan jam bulat.
 int bonusTargetForHours(double hours) {
-  if (hours < 7.5) return 0;
-  switch (hours.round().clamp(8, 14).toInt()) {
+  if (hours < 8) return 0;
+  switch (hours.floor().clamp(8, 14).toInt()) {
     case 8:
       return 55;
     case 9:
