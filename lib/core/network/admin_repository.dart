@@ -341,96 +341,195 @@ class AdminRepository {
     DateTime? startDate,
     DateTime? endDate,
   }) async {
-    final now = endDate ?? DateTime.now();
-    final start = startDate ?? now.subtract(Duration(days: days - 1));
+    final end = endDate ?? _lastCompletedOperationalDate(DateTime.now());
+    final start = startDate ?? end.subtract(Duration(days: days - 1));
     final startKey = DateFormat('yyyy-MM-dd').format(start);
-    final endKey = DateFormat('yyyy-MM-dd').format(now);
+    final endKey = DateFormat('yyyy-MM-dd').format(end);
 
-    final presensiSnap = await _db
-        .collection('presensi')
-        .where('tanggal', isGreaterThanOrEqualTo: startKey)
-        .where('tanggal', isLessThanOrEqualTo: endKey)
-        .get();
+    final results = await Future.wait([
+      _db
+          .collection('presensi')
+          .where('tanggal', isGreaterThanOrEqualTo: startKey)
+          .where('tanggal', isLessThanOrEqualTo: endKey)
+          .get(),
+      _db.collection('users').get(),
+      _db.collection('cabang').get(),
+    ]);
 
-    // Kelompokkan per karyawan
-    Map<String, Map<String, dynamic>> map = {};
-    for (final doc in presensiSnap.docs) {
-      final d = doc.data();
-      final empId = d['id_karyawan']?.toString() ?? '';
-      final empName = d['nama_karyawan']?.toString() ?? 'Karyawan';
-      if (!map.containsKey(empId)) {
-        map[empId] = {
-          'id': empId,
-          'nama': empName,
-          'days': 0,
-          'hours': 0.0,
-          'wage': 0.0,
-        };
-      }
-      map[empId]!['days'] = (map[empId]!['days'] as int) + 1;
-      map[empId]!['hours'] =
-          (map[empId]!['hours'] as double) +
-          ((d['total_jam'] as num?)?.toDouble() ?? 8.0);
+    final userData = {
+      for (final doc in (results[1] as QuerySnapshot<Map<String, dynamic>>).docs)
+        doc.id: doc.data(),
+    };
+    final branchData = {
+      for (final doc in (results[2] as QuerySnapshot<Map<String, dynamic>>).docs)
+        doc.id: doc.data(),
+    };
+
+    final grouped = <String, Map<String, dynamic>>{};
+    for (final doc in (results[0] as QuerySnapshot<Map<String, dynamic>>).docs) {
+      final shift = doc.data();
+      final status = (shift['status_presensi'] ?? shift['status'])
+          ?.toString()
+          .toUpperCase();
+      if (status != 'SELESAI' && status != 'TUTUP_SELESAI') continue;
+
+      final employeeId = shift['id_karyawan']?.toString() ?? '';
+      if (employeeId.isEmpty) continue;
+      final hours = _shiftHours(shift);
+      if (hours <= 0) continue;
+
+      final profile = userData[employeeId] ?? const <String, dynamic>{};
+      final branch = branchData[shift['id_cabang']?.toString()] ??
+          const <String, dynamic>{};
+      final wage = money(profile['tarif_per_jam'] ?? shift['tarif_per_jam']);
+      final lateMinutes = _lateMinutes(shift, branch);
+      final schedule = (branch['jam_operasional'] is Map)
+          ? Map<String, dynamic>.from(branch['jam_operasional'] as Map)
+          : branch;
+      final rawRate = schedule['potongan_per_15_menit'];
+      final deductionRate = rawRate == null ? 750.0 : money(rawRate);
+      final deduction = lateMinutes == 0
+          ? 0.0
+          : ((lateMinutes + 14) ~/ 15) * deductionRate;
+
+      final row = grouped.putIfAbsent(employeeId, () => {
+        'id': employeeId,
+        'name': profile['nama']?.toString() ??
+            shift['nama_karyawan']?.toString() ??
+            'Karyawan',
+        'days': 0,
+        'hours': 0.0,
+        'gross': 0.0,
+        'deduction': 0.0,
+        'lateMinutes': 0,
+      });
+      row['days'] = (row['days'] as int) + 1;
+      row['hours'] = (row['hours'] as double) + hours;
+      row['gross'] = (row['gross'] as double) + (hours * wage);
+      row['deduction'] = (row['deduction'] as double) + deduction;
+      row['lateMinutes'] = (row['lateMinutes'] as int) + lateMinutes;
     }
 
-    return map.values
-        .map(
-          (j) => PayrollRecord(
-            id: j['id'] as String,
-            name: j['nama'] as String,
-            days: j['days'] as int,
-            hours: j['hours'] as double,
-            net: (j['hours'] as double) * 15000, // default tarif estimasi
-          ),
-        )
-        .toList();
+    final records = grouped.values.map((row) {
+      final gross = row['gross'] as double;
+      final deduction = row['deduction'] as double;
+      return PayrollRecord(
+        id: row['id'] as String,
+        name: row['name'] as String,
+        days: row['days'] as int,
+        hours: row['hours'] as double,
+        gross: gross,
+        deduction: deduction,
+        lateMinutes: row['lateMinutes'] as int,
+        net: max(0.0, gross - deduction),
+      );
+    }).toList();
+    records.sort((a, b) => b.net.compareTo(a.net));
+    return records;
   }
 
   Future<List<BonusRecord>> bonus({
-    int days = 7,
+    int days = 30,
     DateTime? startDate,
     DateTime? endDate,
   }) async {
-    final now = endDate ?? DateTime.now();
-    final start = startDate ?? now.subtract(Duration(days: days - 1));
+    final end = endDate ?? _lastCompletedOperationalDate(DateTime.now());
+    final start = startDate ?? end.subtract(Duration(days: days - 1));
     final startKey = DateFormat('yyyy-MM-dd').format(start);
-    final endKey = DateFormat('yyyy-MM-dd').format(now);
+    final endKey = DateFormat('yyyy-MM-dd').format(end);
 
-    final reportSnap = await _db
-        .collection('laporan_shift')
-        .where('tanggal_operasional', isGreaterThanOrEqualTo: startKey)
-        .where('tanggal_operasional', isLessThanOrEqualTo: endKey)
-        .get();
+    final results = await Future.wait([
+      _db
+          .collection('laporan_shift')
+          .where('tanggal_operasional', isGreaterThanOrEqualTo: startKey)
+          .where('tanggal_operasional', isLessThanOrEqualTo: endKey)
+          .get(),
+      _db
+          .collection('presensi')
+          .where('tanggal', isGreaterThanOrEqualTo: startKey)
+          .where('tanggal', isLessThanOrEqualTo: endKey)
+          .get(),
+      _db.collection('users').get(),
+    ]);
 
-    Map<String, Map<String, dynamic>> map = {};
-    for (final doc in reportSnap.docs) {
-      final d = doc.data();
-      final empId = d['id_karyawan']?.toString() ?? '';
-      if (!map.containsKey(empId)) {
-        map[empId] = {
-          'nama': d['nama_karyawan']?.toString() ?? 'Karyawan',
-          'days': 0,
-          'sold': 0,
-        };
-      }
-      map[empId]!['days'] = (map[empId]!['days'] as int) + 1;
-      final startB = (d['roti_awal'] as num?)?.toInt() ?? 0;
-      final leftB = (d['roti_sisa'] as num?)?.toInt() ?? 0;
-      map[empId]!['sold'] = (map[empId]!['sold'] as int) + (startB - leftB);
+    final userData = {
+      for (final doc in (results[2] as QuerySnapshot<Map<String, dynamic>>).docs)
+        doc.id: doc.data(),
+    };
+    final hoursByShift = <String, double>{};
+    for (final doc in (results[1] as QuerySnapshot<Map<String, dynamic>>).docs) {
+      final shift = doc.data();
+      final status = (shift['status_presensi'] ?? shift['status'])
+          ?.toString()
+          .toUpperCase();
+      if (status != 'SELESAI' && status != 'TUTUP_SELESAI') continue;
+      final employeeId = shift['id_karyawan']?.toString() ?? '';
+      final date = shift['tanggal']?.toString() ?? '';
+      if (employeeId.isEmpty || date.isEmpty) continue;
+      hoursByShift['$employeeId|$date'] = _shiftHours(shift);
     }
 
-    return map.values.map((j) {
-      final sold = j['sold'] as int;
-      final days = j['days'] as int;
-      final target = days * 50; // target 50 roti per shift
+    // Satu laporan per karyawan per tanggal operasional, agar duplikasi laporan
+    // tidak menggandakan jumlah roti maupun target bonus.
+    final uniqueReports = <String, Map<String, dynamic>>{};
+    for (final doc in (results[0] as QuerySnapshot<Map<String, dynamic>>).docs) {
+      final report = doc.data();
+      final employeeId = report['id_karyawan']?.toString() ?? '';
+      final date = report['tanggal_operasional']?.toString() ?? '';
+      if (employeeId.isEmpty || date.isEmpty) continue;
+      uniqueReports.putIfAbsent('$employeeId|$date', () => report);
+    }
+
+    final grouped = <String, Map<String, dynamic>>{};
+    for (final entry in uniqueReports.entries) {
+      final report = entry.value;
+      final parts = entry.key.split('|');
+      final employeeId = parts[0];
+      final date = parts[1];
+      final hours = hoursByShift[entry.key] ?? 0;
+      final target = bonusTargetForHours(hours);
+      // Belum ada target bonus yang ditetapkan untuk shift di bawah 8 jam.
+      if (target == 0) continue;
+
+      final breadStart = money(report['roti_awal'] ?? report['roti_diantar']);
+      final breadLeft = money(report['roti_sisa']);
+      final damaged = money(report['roti_rusak_bonus']);
+      final sold = report['roti_terjual'] == null
+          ? max(0, (breadStart - breadLeft - damaged).round())
+          : money(report['roti_terjual']).round();
+
+      final profile = userData[employeeId] ?? const <String, dynamic>{};
+      final row = grouped.putIfAbsent(employeeId, () => {
+        'id': employeeId,
+        'name': profile['nama']?.toString() ??
+            report['nama_karyawan']?.toString() ??
+            'Karyawan',
+        'days': 0,
+        'hours': 0.0,
+        'sold': 0,
+        'target': 0,
+      });
+      row['days'] = (row['days'] as int) + 1;
+      row['hours'] = (row['hours'] as double) + hours;
+      row['sold'] = (row['sold'] as int) + sold;
+      row['target'] = (row['target'] as int) + target;
+    }
+
+    final records = grouped.values.map((row) {
+      final sold = row['sold'] as int;
+      final target = row['target'] as int;
       return BonusRecord(
-        name: j['nama'] as String,
-        days: days,
+        id: row['id'] as String,
+        name: row['name'] as String,
+        days: row['days'] as int,
+        totalHours: row['hours'] as double,
         sold: sold,
         target: target,
         excess: max(0, sold - target),
       );
     }).toList();
+    records.sort((a, b) => b.excess.compareTo(a.excess));
+    return records;
   }
 
   Future<List<AdminReportRecord>> shiftReports({
@@ -461,6 +560,72 @@ class AdminRepository {
         .get();
 
     return snap.docs.map((doc) => CashierRecord.fromJson(doc.data())).toList();
+  }
+}
+
+DateTime _lastCompletedOperationalDate(DateTime now) {
+  final today = DateTime(now.year, now.month, now.day);
+  return today.subtract(Duration(days: now.hour < 5 ? 2 : 1));
+}
+
+int _minutesFromTime(dynamic value) {
+  final text = value?.toString() ?? '';
+  final match = RegExp(r'(\\d{1,2}):(\\d{2})').firstMatch(text);
+  if (match == null) return -1;
+  final hour = int.tryParse(match.group(1)!) ?? -1;
+  final minute = int.tryParse(match.group(2)!) ?? -1;
+  if (hour < 0 || hour > 23 || minute < 0 || minute > 59) return -1;
+  return hour * 60 + minute;
+}
+
+double _shiftHours(Map<String, dynamic> shift) {
+  final stored = money(shift['total_jam']);
+  if (stored > 0) return stored;
+  final start = _minutesFromTime(shift['jam_masuk']);
+  final end = _minutesFromTime(shift['jam_pulang']);
+  if (start < 0 || end < 0) return 0;
+  var minutes = end - start;
+  if (minutes < 0) minutes += 1440;
+  return minutes / 60;
+}
+
+int _lateMinutes(
+  Map<String, dynamic> shift,
+  Map<String, dynamic> branch,
+) {
+  final schedule = branch['jam_operasional'] is Map
+      ? Map<String, dynamic>.from(branch['jam_operasional'] as Map)
+      : branch;
+  final opening = _minutesFromTime(
+    schedule['jam_buka'] ?? schedule['jam_operasional_mulai'],
+  );
+  final checkIn = _minutesFromTime(shift['jam_masuk']);
+  if (opening < 0 || checkIn < 0) return 0;
+  final tolerance = money(
+    schedule['toleransi_terlambat_menit'] ?? schedule['toleransi_menit'],
+  ).round();
+  return max(0, checkIn - opening - tolerance);
+}
+
+/// Target per shift sesuai ketentuan operasional. Jam kerja dibulatkan ke
+/// jam terdekat karena target ditentukan dalam satuan jam bulat.
+int bonusTargetForHours(double hours) {
+  if (hours < 7.5) return 0;
+  switch (hours.round().clamp(8, 14).toInt()) {
+    case 8:
+      return 55;
+    case 9:
+      return 62;
+    case 10:
+      return 69;
+    case 11:
+      return 75;
+    case 12:
+      return 82;
+    case 13:
+      return 89;
+    default:
+      return 96;
   }
 }
 
@@ -580,23 +745,29 @@ class PayrollRecord {
     required this.name,
     required this.days,
     required this.hours,
+    required this.gross,
+    required this.deduction,
+    required this.lateMinutes,
     required this.net,
   });
   final String id, name;
-  final int days;
-  final double hours, net;
+  final int days, lateMinutes;
+  final double hours, gross, deduction, net;
 }
 
 class BonusRecord {
   const BonusRecord({
+    required this.id,
     required this.name,
     required this.days,
+    required this.totalHours,
     required this.sold,
     required this.target,
     required this.excess,
   });
-  final String name;
+  final String id, name;
   final int days, sold, target, excess;
+  final double totalHours;
 }
 
 class AdminReportRecord {
