@@ -6,6 +6,7 @@ import 'package:roti_bakar_borneo_flutter/pages/admin_dashboard_page.dart';
 import 'package:roti_bakar_borneo_flutter/pages/finance_page.dart';
 import 'package:roti_bakar_borneo_flutter/pages/manage_data_page.dart';
 import 'package:roti_bakar_borneo_flutter/pages/admin_reports_page.dart';
+import 'package:roti_bakar_borneo_flutter/pages/payroll_page.dart';
 import 'package:roti_bakar_borneo_flutter/pages/profile_page.dart';
 import 'package:roti_bakar_borneo_flutter/pages/cashier_page.dart';
 import 'package:roti_bakar_borneo_flutter/pages/shift_report_page.dart';
@@ -34,6 +35,7 @@ class _HomeShellState extends State<HomeShell> {
             FinancePage(session: widget.session),
             ManageDataPage(session: widget.session),
             AdminReportsPage(session: widget.session),
+            PayrollPage(session: widget.session),
             ProfilePage(session: widget.session),
           ]
         : [
@@ -68,6 +70,11 @@ class _HomeShellState extends State<HomeShell> {
               CupertinoIcons.chart_bar_square_fill,
               CupertinoIcons.chart_bar_square,
               'Laporan',
+            ),
+            (
+              CupertinoIcons.money_dollar_circle_fill,
+              CupertinoIcons.money_dollar_circle,
+              'Payroll',
             ),
             (
               CupertinoIcons.person_crop_circle_fill,
