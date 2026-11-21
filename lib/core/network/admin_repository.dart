@@ -607,8 +607,8 @@ int _lateMinutes(
   return max(0, checkIn - opening - tolerance);
 }
 
-/// Target per shift sesuai ketentuan operasional. Jam kerja dibulatkan ke
-/// jam terdekat karena target ditentukan dalam satuan jam bulat.
+/// Target per shift sesuai ketentuan operasional. Jam kerja dihitung dalam
+/// jam penuh yang sudah diselesaikan; shift di bawah 8 jam belum memiliki target.
 int bonusTargetForHours(double hours) {
   if (hours < 8) return 0;
   switch (hours.floor().clamp(8, 14).toInt()) {
