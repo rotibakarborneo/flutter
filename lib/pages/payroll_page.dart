@@ -44,7 +44,7 @@ class _PayrollPageState extends State<PayrollPage> {
   }
 
   String _rupiah(double value) =>
-      'Rp ${value.round().toString().replaceAllMapped(RegExp(r'(?<!^)(?=(\\d{3})+$)'), (m) => '.')}';
+      'Rp ${value.round().toString().replaceAllMapped(RegExp(r'(?<!^)(?=(\d{3})+$)'), (m) => '.')}';
 
   @override
   Widget build(BuildContext context) => Scaffold(
