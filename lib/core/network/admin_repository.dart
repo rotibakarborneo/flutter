@@ -570,7 +570,7 @@ DateTime _lastCompletedOperationalDate(DateTime now) {
 
 int _minutesFromTime(dynamic value) {
   final text = value?.toString() ?? '';
-  final match = RegExp(r'(\\d{1,2}):(\\d{2})').firstMatch(text);
+  final match = RegExp(r'(\d{1,2}):(\d{2})').firstMatch(text);
   if (match == null) return -1;
   final hour = int.tryParse(match.group(1)!) ?? -1;
   final minute = int.tryParse(match.group(2)!) ?? -1;
