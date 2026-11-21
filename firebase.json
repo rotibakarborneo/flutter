@@ -1,4 +1,7 @@
 {
+  "firestore": {
+    "rules": "firestore.rules"
+  },
   "hosting": {
     "public": "build/web",
     "ignore": [
@@ -12,27 +15,5 @@
         "destination": "/index.html"
       }
     ]
-  },
-  "flutter": {
-    "platforms": {
-      "android": {
-        "default": {
-          "projectId": "roti-bakar-borneo-94f06",
-          "appId": "1:159563009020:android:cf90c82b9dc8308912c079",
-          "fileOutput": "android/app/google-services.json"
-        }
-      },
-      "dart": {
-        "lib/firebase_options.dart": {
-          "projectId": "roti-bakar-borneo-94f06",
-          "configurations": {
-            "android": "1:159563009020:android:cf90c82b9dc8308912c079",
-            "ios": "1:159563009020:ios:e3947c2639d733fe12c079",
-            "macos": "1:159563009020:ios:e3947c2639d733fe12c079",
-            "web": "1:159563009020:web:98bd1c17845b14ad12c079"
-          }
-        }
-      }
-    }
   }
 }

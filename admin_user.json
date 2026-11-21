@@ -1,0 +1,23 @@
+{"users": [
+{
+  "localId": "BNLbYJyCEWcvKwNxt9KE2GNBC2K2",
+  "email": "rotibakarborneo@gmail.com",
+  "emailVerified": true,
+  "passwordHash": "LW9hExcvWvYW3yFvj3iCBbcHPVetnajAmJDOU20qTX8gQ3FS/O3a3sXscb9lKN3uo9MfqEkiDdrjsqsYHFeDgg==",
+  "salt": "wVqCLQq/8tNh3g==",
+  "displayName": "Boss Admin Borneo",
+  "createdAt": "1795108447433",
+  "disabled": false,
+  "providerUserInfo": []
+},
+{
+  "localId": "H3W2tCw6XTg6oHmUDHu7LGjHphl2",
+  "email": "admin@rbb.app",
+  "emailVerified": true,
+  "passwordHash": "IQvC2EayCR2rnVcyJyQHOz+baklnm/IPJLg4sN2g3B+rfy9k51meh87aKYm6C9OKBRoMpdxFrZunL0hZEzLqig==",
+  "salt": "afWiQb1JKghMDA==",
+  "displayName": "Boss Admin Borneo",
+  "createdAt": "1795108895151",
+  "disabled": false,
+  "providerUserInfo": []
+}]}

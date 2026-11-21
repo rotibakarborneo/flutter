@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:roti_bakar_borneo_flutter/firebase_options.dart';
 import 'package:roti_bakar_borneo_flutter/pages/home_shell.dart';
 import 'package:roti_bakar_borneo_flutter/core/session/app_session.dart';
 import 'package:roti_bakar_borneo_flutter/colors.dart';
+import 'package:roti_bakar_borneo_flutter/features/auth/data/auth_repository.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -59,7 +61,35 @@ class SessionGate extends StatelessWidget {
   const SessionGate({super.key});
   @override
   Widget build(BuildContext context) => FutureBuilder<AppSession?>(
-    future: AppSession.read(),
+    future: () async {
+      // Sesi hanya dianggap valid jika pengguna masih login di Firebase Auth.
+      final user = await FirebaseAuth.instance.authStateChanges().first;
+      if (user == null) {
+        await AppSession.clear();
+        return null;
+      }
+      final localSession = await AppSession.read();
+      if (localSession == null || localSession.idKaryawan != user.uid) {
+        await AppSession.clear();
+        if (FirebaseAuth.instance.currentUser == null) return null;
+        final doc = await FirebaseFirestore.instance
+            .collection('users')
+            .doc(user.uid)
+            .get();
+        if (!doc.exists) return null;
+        final data = doc.data()!;
+        final session = AppSession(
+          idKaryawan: user.uid,
+          nama: data['nama']?.toString() ?? '',
+          role: data['role']?.toString() ?? 'KARYAWAN',
+          idCabang: data['id_cabang']?.toString() ?? '',
+          fotoProfilUrl: data['foto_profil_url']?.toString(),
+        );
+        await session.save();
+        return session;
+      }
+      return localSession;
+    }(),
     builder: (context, snapshot) {
       if (snapshot.connectionState != ConnectionState.done) {
         return const Scaffold(body: Center(child: CircularProgressIndicator()));
@@ -103,24 +133,9 @@ class _LoginPageState extends State<LoginPage> {
 
     setState(() => _loading = true);
     try {
-      final result = await FirebaseFirestore.instance
-          .collection('users')
-          .where('username', isEqualTo: username)
-          .limit(1)
-          .get();
-      if (result.docs.isEmpty) throw 'Akun tidak ditemukan.';
-
-      final document = result.docs.single;
-      final data = document.data();
-      if (data['password']?.toString() != password)
-        throw 'Password tidak sesuai.';
-
-      final session = AppSession(
-        idKaryawan: data['id_karyawan']?.toString() ?? document.id,
-        nama: data['nama']?.toString() ?? username,
-        role: data['role']?.toString() ?? 'KARYAWAN',
-        idCabang: data['id_cabang']?.toString() ?? '',
-        fotoProfilUrl: data['foto_profil_url']?.toString(),
+      final session = await const AuthRepository().login(
+        username: username,
+        password: password,
       );
       await session.save();
       if (!mounted) return;
@@ -129,9 +144,14 @@ class _LoginPageState extends State<LoginPage> {
         (_) => false,
       );
     } catch (error) {
-      if (mounted)
+      final text =
+          error is FirebaseException && error.code == 'permission-denied'
+          ? 'Akses ditolak. Profil akun belum diatur dengan benar.'
+          : '$error';
+      if (mounted) {
         ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('$error')));
+            .showSnackBar(SnackBar(content: Text(text)));
+      }
     } finally {
       if (mounted) setState(() => _loading = false);
     }

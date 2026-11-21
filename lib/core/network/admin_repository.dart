@@ -1,8 +1,11 @@
 import 'dart:math';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:intl/intl.dart';
 import 'package:roti_bakar_borneo_flutter/core/session/app_session.dart';
+import 'package:roti_bakar_borneo_flutter/firebase_options.dart';
 
 class AdminRepository {
   AdminRepository([FirebaseFirestore? firestore])
@@ -244,16 +247,76 @@ class AdminRepository {
     required String branchId,
     required double wage,
   }) async {
-    // Tambah dokumen ke koleksi users di Firestore
-    await _db.collection('users').add({
-      'nama': name,
-      'username': username,
-      'role': 'KARYAWAN',
-      'id_cabang': branchId,
-      'tarif_per_jam': wage,
-      'dibuat_oleh': session.idKaryawan,
-      'timestamp': FieldValue.serverTimestamp(),
-    });
+    final normalizedName = name.trim();
+    final normalizedUsername = username.trim().toLowerCase();
+    final normalizedPassword = password;
+    final normalizedBranchId = branchId.trim();
+
+    if (normalizedName.length < 3) {
+      throw const FormatException('Nama karyawan minimal 3 karakter.');
+    }
+    if (!RegExp(r'^[a-zA-Z0-9._-]+$').hasMatch(normalizedUsername)) {
+      throw const FormatException(
+        'Username hanya boleh berisi huruf, angka, titik, strip, atau underscore.',
+      );
+    }
+    if (normalizedPassword.length < 6) {
+      throw const FormatException('Password minimal 6 karakter.');
+    }
+    if (normalizedBranchId.isEmpty) {
+      throw const FormatException('Cabang wajib dipilih.');
+    }
+    if (!wage.isFinite || wage < 0) {
+      throw const FormatException('Tarif per jam tidak valid.');
+    }
+
+    FirebaseApp? employeeApp;
+    try {
+      employeeApp = Firebase.app('employeeCreator');
+    } on FirebaseException {
+      employeeApp = await Firebase.initializeApp(
+        name: 'employeeCreator',
+        options: DefaultFirebaseOptions.currentPlatform,
+      );
+    }
+
+    final employeeAuth = FirebaseAuth.instanceFor(app: employeeApp);
+    UserCredential credential;
+    try {
+      credential = await employeeAuth.createUserWithEmailAndPassword(
+        email: '$normalizedUsername@rbb.app',
+        password: normalizedPassword,
+      );
+    } on FirebaseAuthException catch (error) {
+      switch (error.code) {
+        case 'email-already-in-use':
+          throw const FormatException('Username tersebut sudah digunakan.');
+        case 'weak-password':
+          throw const FormatException('Password terlalu lemah.');
+        case 'invalid-email':
+          throw const FormatException('Username tidak valid.');
+        default:
+          throw FormatException('Gagal membuat akun: ${error.message}');
+      }
+    }
+
+    final uid = credential.user!.uid;
+    try {
+      await _db.collection('users').doc(uid).set({
+        'nama': normalizedName,
+        'username': normalizedUsername,
+        'role': 'KARYAWAN',
+        'id_cabang': normalizedBranchId,
+        'tarif_per_jam': wage,
+        'dibuat_oleh': session.idKaryawan,
+        'timestamp': FieldValue.serverTimestamp(),
+      });
+      await employeeAuth.signOut();
+    } catch (_) {
+      await credential.user?.delete();
+      await employeeAuth.signOut();
+      rethrow;
+    }
   }
 
   Future<void> addBranch(
